@@ -1,0 +1,11 @@
+cache/
+__pycache__/
+*.log
+*.log.*
+last-launch.json
+display-mode-backup.json
+*-health-fail.count
+config/input_mappings.json
+tools/PlayniteReader/bin/
+tools/PlayniteReader/obj/
+.env

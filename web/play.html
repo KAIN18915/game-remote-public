@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0d0c0b" />
+  <title>Play · Game Remote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/play.css" />
+</head>
+<body class="play-shell pad-on pad-rails left-dpad mouse-mode-touch layout-landscape">
+  <!-- Stream chrome: hidden by default. Open via pull tab or OPTIONS long-press. -->
+  <div class="stream-menu" id="streamMenu">
+    <button type="button" class="menu-pull" id="menuPull" aria-expanded="false" aria-controls="menuSheet" aria-label="メニュー">
+      <span class="menu-pull-bar" aria-hidden="true"></span>
+    </button>
+    <div class="menu-sheet" id="menuSheet" hidden>
+      <div class="menu-sheet-head">
+        <strong id="playGameName">ストリーム</strong>
+        <button type="button" class="menu-icon-btn" id="menuClose" aria-label="閉じる">×</button>
+      </div>
+      <p class="menu-gp-hint" id="menuGpHint" hidden>↑↓で移動 · ○/A 決定 · ×/B 閉じる</p>
+      <nav class="menu-sheet-nav" aria-label="ストリーム操作">
+        <p class="menu-cat">ストリーム</p>
+        <a class="menu-item" id="btnBack" href="/">ライブラリ</a>
+        <button type="button" class="menu-item" id="btnStreamRes" data-mode="1080p">解像度: 1080p</button>
+        <button type="button" class="menu-item" id="btnStreamMode" aria-pressed="true">配信: ゲーム</button>
+        <button type="button" class="menu-item" id="btnLoadStream">再読み込み</button>
+        <button type="button" class="menu-item" id="btnOpenMw">別タブ</button>
+        <button type="button" class="menu-item" id="btnFs">全画面</button>
+        <button type="button" class="menu-item menu-item-danger" id="btnQuitGame">ゲーム終了</button>
+
+        <p class="menu-cat">パッド</p>
+        <button type="button" class="menu-item" id="btnTogglePad" aria-pressed="true">パッド</button>
+        <button type="button" class="menu-item" id="btnMouse" aria-pressed="true" data-mode="touch">マウス: タッチ</button>
+        <button type="button" class="menu-item" id="btnLeftInput" aria-pressed="false">左: 十字</button>
+        <button type="button" class="menu-item" id="btnPadChrome" aria-pressed="false">配置: 横並び</button>
+        <button type="button" class="menu-item" id="btnPadEdit" aria-pressed="false">配置エディタ</button>
+        <button type="button" class="menu-item" id="btnPadSlot1" aria-pressed="false">横1 (空)</button>
+        <button type="button" class="menu-item" id="btnPadSlot2" aria-pressed="false">横2 (空)</button>
+        <button type="button" class="menu-item" id="btnPadSlot3" aria-pressed="false">横3 (空)</button>
+        <button type="button" class="menu-item" id="btnPadLayoutClear">標準配置</button>
+        <button type="button" class="menu-item" id="btnMap">割当</button>
+        <label class="menu-opacity" id="padOpacityRow">
+          <span>透明度</span>
+          <input type="range" id="padOpacity" min="0" max="100" step="1" value="50" aria-label="パッド透明度" />
+          <span id="padOpacityVal">50%</span>
+        </label>
+
+        <p class="menu-cat">画面</p>
+        <button type="button" class="menu-item" id="btnViewOrient" data-mode="auto">画面: 自動</button>
+        <button type="button" class="menu-item" id="btnViewRotDir">回転: 右90°</button>
+      </nav>
+    </div>
+  </div>
+
+  <div class="gr-confirm" id="quitConfirm" hidden role="alertdialog" aria-modal="true" aria-labelledby="quitConfirmTitle" aria-describedby="quitConfirmMsg">
+    <div class="gr-confirm-card">
+      <h2 class="gr-confirm-title" id="quitConfirmTitle">ゲーム終了</h2>
+      <p class="gr-confirm-msg" id="quitConfirmMsg">起動中のゲームを終了しますか？</p>
+      <p class="gr-confirm-hint" id="quitConfirmHint">←→で選択 · ○/A 決定 · ×/B キャンセル</p>
+      <div class="gr-confirm-actions">
+        <button type="button" class="gr-confirm-btn" id="quitConfirmCancel">キャンセル</button>
+        <button type="button" class="gr-confirm-btn gr-confirm-btn-danger" id="quitConfirmOk">終了する</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="gr-confirm" id="resPicker" hidden role="dialog" aria-modal="true" aria-labelledby="resPickerTitle">
+    <div class="gr-confirm-card gr-res-card">
+      <h2 class="gr-confirm-title" id="resPickerTitle">解像度</h2>
+      <p class="gr-confirm-msg">ストリーム解像度を選ぶ（Windowsの画面解像度も変更）</p>
+      <p class="gr-confirm-hint" id="resPickerHint">↑↓で選択 · ○/A 決定 · ×/B 閉じる</p>
+      <div class="gr-res-options" id="resPickerOptions" role="listbox" aria-labelledby="resPickerTitle">
+        <button type="button" class="gr-res-opt" role="option" data-res="720p">720p · 1280×720</button>
+        <button type="button" class="gr-res-opt" role="option" data-res="1080p">1080p · 1920×1080</button>
+        <button type="button" class="gr-res-opt" role="option" data-res="1440p">1440p · 2560×1440</button>
+        <button type="button" class="gr-res-opt" role="option" data-res="4k">4K · 3840×2160</button>
+        <button type="button" class="gr-res-opt" role="option" data-res="native">画面合わせ</button>
+      </div>
+      <div class="gr-confirm-actions gr-res-actions">
+        <button type="button" class="gr-confirm-btn" id="resPickerCancel">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pad-connect-hint" id="padConnectHint" hidden aria-live="polite">
+    <span class="pad-connect-hint-main" id="padConnectHintMain">コントローラ接続中</span>
+    <span class="pad-connect-hint-sub" id="padConnectHintSub">OPTIONS 長押しでメニュー</span>
+  </div>
+
+  <div class="play-layout" id="playLayout">
+    <aside class="rail rail-left" id="railLeft" aria-label="左パッド">
+      <div class="pad-shoulders pad-shoulders-left" data-pad-unit="l-shoulders">
+        <button type="button" data-action="l2" class="pad-btn slim" aria-label="L2">L2</button>
+        <button type="button" data-action="l1" class="pad-btn slim" aria-label="L1">L1</button>
+      </div>
+      <div class="pad-system pad-system-left" data-pad-unit="l-sys" aria-label="システムボタン左">
+        <button type="button" data-action="select" class="pad-btn slim" aria-label="Select" data-label-xbox="SEL" data-label-ps="CREATE">SEL</button>
+        <button type="button" data-action="touchpad" class="pad-btn slim" aria-label="Touchpad">TP</button>
+      </div>
+      <div class="dpad" id="dpad" data-pad-unit="dpad">
+        <button type="button" data-action="up" class="pad-btn" aria-label="上">▲</button>
+        <button type="button" data-action="left" class="pad-btn" aria-label="左">◀</button>
+        <button type="button" data-action="right" class="pad-btn" aria-label="右">▶</button>
+        <button type="button" data-action="down" class="pad-btn" aria-label="下">▼</button>
+      </div>
+      <div class="vstick" id="leftStick" data-pad-unit="stick" hidden aria-label="左スティック">
+        <div class="vstick-base">
+          <div class="vstick-knob" id="leftStickKnob"></div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="play-stage" id="playStage">
+      <iframe
+        id="streamFrame"
+        title="Moonlight Web Stream"
+        allow="autoplay *; fullscreen *; gamepad *; clipboard-read; clipboard-write; encrypted-media *"
+        allowfullscreen
+        referrerpolicy="no-referrer"
+      ></iframe>
+      <div id="streamCover" class="stream-cover">
+        <p>読み込み中…</p>
+        <button type="button" class="accent" id="btnLoadStreamCover">再読み込み</button>
+      </div>
+    </div>
+
+    <aside class="rail rail-right" id="railRight" aria-label="右パッド">
+      <div class="pad-shoulders pad-shoulders-right" data-pad-unit="r-shoulders">
+        <button type="button" data-action="r1" class="pad-btn slim" aria-label="R1">R1</button>
+        <button type="button" data-action="r2" class="pad-btn slim" aria-label="R2">R2</button>
+      </div>
+      <div class="pad-system pad-system-right" data-pad-unit="r-sys" aria-label="システムボタン右">
+        <button type="button" data-action="start" class="pad-btn slim" aria-label="Start" data-label-xbox="ST" data-label-ps="OPT">ST</button>
+      </div>
+      <div class="face" id="face" data-pad-unit="face">
+        <button type="button" data-action="y" class="pad-btn face-y" aria-label="Y" data-label-xbox="Y" data-label-ps="△">Y</button>
+        <button type="button" data-action="x" class="pad-btn face-x" aria-label="X" data-label-xbox="X" data-label-ps="□">X</button>
+        <button type="button" data-action="b" class="pad-btn face-b" aria-label="B" data-label-xbox="B" data-label-ps="○">B</button>
+        <button type="button" data-action="a" class="pad-btn face-a" aria-label="A" data-label-xbox="A" data-label-ps="×">A</button>
+      </div>
+    </aside>
+  </div>
+
+  <div id="padEditBar" class="pad-edit-bar" hidden>
+    <button type="button" id="padEditSave1">保存1</button>
+    <button type="button" id="padEditSave2">保存2</button>
+    <button type="button" id="padEditSave3">保存3</button>
+    <button type="button" id="padEditReset">取込</button>
+    <button type="button" id="padEditRestore">非表示を戻す</button>
+    <button type="button" class="accent" id="padEditDone">完了</button>
+  </div>
+
+  <div id="pad" class="pad play-pad sr-only-pad" aria-hidden="true"></div>
+
+  <dialog id="mapDlg">
+    <form method="dialog" class="dlg">
+      <h2>キー割当</h2>
+      <div class="map-scope">
+        <label><input type="radio" name="mapScope" value="default" checked /> デフォルト</label>
+        <label><input type="radio" name="mapScope" value="game" id="mapScopeGame" /> このゲーム</label>
+      </div>
+      <p class="hint" id="mapGameLabel">ゲーム未選択</p>
+      <div id="mapList" class="map-list"></div>
+      <div class="row">
+        <button type="button" class="accent" id="mapSave">保存</button>
+        <button type="button" id="mapReset">初期化</button>
+        <button type="button" id="mapClearGame">例外を削除</button>
+        <button value="cancel">閉じる</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="/static/controls.js"></script>
+  <script src="/static/pad-layout.js"></script>
+  <script src="/static/play.js?cb=20260903x"></script>
+</body>
+</html>

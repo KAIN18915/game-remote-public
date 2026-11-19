@@ -1,0 +1,94 @@
+{
+  "version": 2,
+  "actions": [
+    "up",
+    "down",
+    "left",
+    "right",
+    "a",
+    "b",
+    "x",
+    "y",
+    "l1",
+    "r1",
+    "l2",
+    "r2",
+    "l3",
+    "r3",
+    "start",
+    "select",
+    "touchpad"
+  ],
+  "mapping": {
+    "up": {
+      "type": "key",
+      "code": "up"
+    },
+    "down": {
+      "type": "key",
+      "code": "down"
+    },
+    "left": {
+      "type": "key",
+      "code": "left"
+    },
+    "right": {
+      "type": "key",
+      "code": "right"
+    },
+    "a": {
+      "type": "key",
+      "code": "enter"
+    },
+    "b": {
+      "type": "key",
+      "code": "esc"
+    },
+    "x": {
+      "type": "key",
+      "code": "z"
+    },
+    "y": {
+      "type": "key",
+      "code": "x"
+    },
+    "l1": {
+      "type": "key",
+      "code": "q"
+    },
+    "r1": {
+      "type": "key",
+      "code": "e"
+    },
+    "l2": {
+      "type": "key",
+      "code": "1"
+    },
+    "r2": {
+      "type": "key",
+      "code": "3"
+    },
+    "l3": {
+      "type": "key",
+      "code": "shift"
+    },
+    "r3": {
+      "type": "key",
+      "code": "ctrl"
+    },
+    "start": {
+      "type": "key",
+      "code": "enter"
+    },
+    "select": {
+      "type": "key",
+      "code": "tab"
+    },
+    "touchpad": {
+      "type": "mouse",
+      "code": "left"
+    }
+  },
+  "gameOverrides": {},
+  "activeGameId": null
+}

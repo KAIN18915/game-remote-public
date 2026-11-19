@@ -1,0 +1,27 @@
+services:
+  game-remote:
+    build: .
+    image: game-remote:latest
+    env_file: .env
+    ports:
+      - "${GAME_REMOTE_BIND:-127.0.0.1}:${GAME_REMOTE_PORT:-8765}:8765"
+    volumes:
+      # Playnite library folder (the one containing games.db). Mounted read-only:
+      # the server only ever copies the *.db files into its own cache.
+      - "${PLAYNITE_LIBRARY_DIR:?set PLAYNITE_LIBRARY_DIR in .env}:/data/playnite:ro"
+      - game-remote-cache:/app/cache
+      - game-remote-config:/app/config
+      # Optional extensions, e.g. a checkout of an extension repository.
+      - "${GAME_REMOTE_EXTENSIONS_DIR:-./extensions_dir}:/app/extensions_dir:ro"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+volumes:
+  game-remote-cache:
+  game-remote-config:

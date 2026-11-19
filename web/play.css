@@ -1,0 +1,997 @@
+/* Play shell — stream + pad rails; chrome is a pull sheet, not a permanent bar. */
+
+html, body.play-shell {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  color-scheme: dark;
+  font-family: "IBM Plex Sans JP", system-ui, sans-serif;
+}
+
+.play-shell {
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --touch-min: 40px;
+  --pull-w: 16px;
+  --pull-hit-w: 40px;
+  --pull-hit-h: min(40vh, 200px);
+  /* Logical viewport (JS sets these; equals physical unless CSS-rotated 90°) */
+  --lvw: 100vw;
+  --lvh: 100dvh;
+  --lvmin: 100vmin;
+  --lvmax: 100vmax;
+  --menu-bg: rgba(18, 16, 14, 0.94);
+  --menu-line: rgba(239, 234, 225, 0.1);
+  --rail-left-w: auto;
+  --rail-right-w: auto;
+
+  width: 100%;
+  max-width: 100vw;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #0d0c0b;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Forced layout ≠ device tilt: rotate the whole play UI 90° */
+html:has(body.orient-rot-cw),
+html:has(body.orient-rot-ccw) {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0d0c0b;
+}
+body.play-shell.orient-rot-cw,
+body.play-shell.orient-rot-ccw {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  /* Logical box = swapped viewport. Prefer inline px from JS; these are fallbacks. */
+  width: 100dvh;
+  height: 100dvw;
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  transform-origin: center center;
+  overscroll-behavior: none;
+  /* Avoid inheriting non-rotated shell height:100dvh which squashes to ~1:1 after rotate */
+  flex: none;
+}
+body.play-shell.orient-rot-cw {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+body.play-shell.orient-rot-ccw {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+/* ========== Right-edge pull menu ========== */
+/* Float over stream; below pad buttons (z 8–9). Sheet bumps above when open. */
+.stream-menu {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  pointer-events: none;
+}
+.stream-menu.is-open {
+  z-index: 60;
+}
+
+.menu-pull {
+  pointer-events: auto;
+  position: relative;
+  align-self: center;
+  margin-right: env(safe-area-inset-right, 0px);
+  width: var(--pull-w);
+  height: 40px;
+  min-width: var(--pull-w);
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px 0 0 8px;
+  background: rgba(18, 16, 14, 0.55);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: visible;
+}
+/* Invisible hit only — does not grow the visible chrome */
+.menu-pull::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--pull-hit-w);
+  height: var(--pull-hit-h);
+  transform: translateY(-50%);
+  /* keep hit behind the visible tab chrome */
+  z-index: 0;
+}
+.menu-pull-bar {
+  width: 2px;
+  height: 18px;
+  border-radius: 1px;
+  background: rgba(239, 234, 225, 0.5);
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.menu-pull:focus-visible {
+  outline: 2px solid var(--accent, #d4783a);
+  outline-offset: 2px;
+}
+.stream-menu.is-open .menu-pull-bar {
+  background: rgba(239, 234, 225, 0.8);
+}
+
+.menu-sheet {
+  pointer-events: auto;
+  width: min(calc(var(--lvw) * 0.78), 300px);
+  max-height: calc(var(--lvh) - 24px);
+  align-self: center;
+  margin: 12px 0 12px 0;
+  margin-right: 0;
+  padding: var(--space-1);
+  border: 1px solid var(--menu-line);
+  border-radius: 12px 0 0 12px;
+  background: var(--menu-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.45);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.menu-sheet[hidden] {
+  display: none !important;
+}
+
+.menu-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid var(--menu-line);
+}
+.menu-sheet-head strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--paper, #efeae1);
+}
+.menu-icon-btn {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--paper-dim, #c9c2b6);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.menu-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--paper, #efeae1);
+}
+
+.menu-gp-hint {
+  margin: 0;
+  padding: 0 2px 6px;
+  color: var(--paper-dim, #c9c2b6);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+.menu-gp-hint[hidden] {
+  display: none !important;
+}
+.menu-item.is-gp-focus {
+  outline: 2px solid var(--accent, #d4783a);
+  outline-offset: 1px;
+  background: rgba(212, 120, 58, 0.18);
+}
+
+.pad-connect-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 234, 225, 0.14);
+  background: rgba(18, 16, 14, 0.88);
+  color: var(--paper, #efeae1);
+  pointer-events: none;
+  max-width: min(92vw, 360px);
+  text-align: center;
+}
+.pad-connect-hint[hidden] {
+  display: none !important;
+}
+.pad-connect-hint-main {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.pad-connect-hint-sub {
+  font-size: 0.68rem;
+  color: var(--paper-dim, #c9c2b6);
+}
+
+/* Physical controller connected: prefer lean chrome; hint carries the controls story */
+body.play-shell.physical-pad .pad-connect-hint {
+  display: flex;
+}
+body.play-shell.physical-pad.pad-auto-hide .rail {
+  opacity: 0.22;
+  pointer-events: none;
+}
+body.play-shell.physical-pad.pad-auto-hide.pad-edit .rail {
+  opacity: 1;
+  pointer-events: auto;
+}
+.menu-sheet-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding-top: 8px;
+}
+.menu-cat {
+  grid-column: 1 / -1;
+  margin: 0.55rem 0 0.1rem;
+  padding: 0 2px;
+  color: var(--paper-dim, #c9c2b6);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.menu-cat:first-child {
+  margin-top: 0;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--menu-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--paper, #efeae1);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: rgba(255, 255, 255, 0.09);
+}
+.menu-item[aria-pressed="true"] {
+  border-color: rgba(212, 120, 58, 0.55);
+  color: #f0c49a;
+}
+.menu-item-danger {
+  border-color: rgba(196, 91, 91, 0.45);
+  color: #e8a0a0;
+}
+.menu-item-danger:hover,
+.menu-item-danger:focus-visible {
+  background: rgba(196, 91, 91, 0.18);
+}
+a.menu-item {
+  box-sizing: border-box;
+}
+
+/* ========== Layout: stream | rails ========== */
+.play-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  box-sizing: border-box;
+  padding:
+    max(var(--space-1), env(safe-area-inset-top, 0px))
+    max(var(--space-1), env(safe-area-inset-right, 0px))
+    max(var(--space-1), env(safe-area-inset-bottom, 0px))
+    max(var(--space-1), env(safe-area-inset-left, 0px));
+  gap: var(--space-1);
+  background: #000;
+  /* Default = landscape 3-pane; portrait overrides below. Avoid 1fr 1fr square stage. */
+  grid-template-columns:
+    minmax(var(--rail-left-w, auto), max-content)
+    minmax(0, 1fr)
+    minmax(var(--rail-right-w, auto), max-content);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "left stage right";
+}
+
+.play-stage {
+  grid-area: stage;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #000;
+  overflow: hidden;
+}
+.play-stage iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+/* Host mouse / touch from stream iframe */
+.play-shell.mouse-mode-off .play-stage iframe {
+  pointer-events: none;
+}
+.play-shell.mouse-mode-off .pad-btn[data-action="touchpad"] {
+  opacity: 0.35;
+}
+.play-shell.mouse-mode-touch .play-stage iframe,
+.play-shell.mouse-mode-click .play-stage iframe,
+.play-shell.mouse-mode-tap .play-stage iframe,
+.play-shell.mouse-mode-trackpad .play-stage iframe {
+  pointer-events: auto;
+}
+
+.rail-left { grid-area: left; }
+.rail-right { grid-area: right; }
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.pad-shoulders {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+}
+
+.pad-system {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  width: 100%;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+.pad-system .pad-btn.slim {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dpad,
+.face {
+  position: relative;
+  width: calc(var(--touch-min) * 2.75);
+  height: calc(var(--touch-min) * 2.75);
+  flex: 0 0 auto;
+}
+.dpad .pad-btn,
+.face .pad-btn {
+  position: absolute;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+}
+.dpad [data-action="up"] { left: 50%; top: 0; transform: translateX(-50%); }
+.dpad [data-action="down"] { left: 50%; bottom: 0; transform: translateX(-50%); }
+.dpad [data-action="left"] { left: 0; top: 50%; transform: translateY(-50%); }
+.dpad [data-action="right"] { right: 0; top: 50%; transform: translateY(-50%); }
+.face-y { left: 50%; top: 0; transform: translateX(-50%); }
+.face-x { left: 0; top: 50%; transform: translateY(-50%); }
+.face-b { right: 0; top: 50%; transform: translateY(-50%); }
+.face-a { left: 50%; bottom: 0; transform: translateX(-50%); }
+
+.play-layout .pad-btn {
+  border: 1px solid rgba(239, 234, 225, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.7rem;
+  color: var(--paper, #efeae1);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+.play-layout .pad-btn.slim {
+  flex: 1 1 auto;
+  min-width: calc(var(--touch-min) * 1.05);
+  min-height: calc(var(--touch-min) * 0.9);
+  padding: 0 8px;
+}
+.play-layout .pad-btn:active,
+.play-layout .pad-btn.active {
+  background: rgba(212, 120, 58, 0.55);
+  border-color: rgba(212, 120, 58, 0.85);
+}
+.face .pad-btn { border-radius: 50%; }
+
+/* Virtual stick (left input alternate) */
+.vstick {
+  position: relative;
+  width: calc(var(--touch-min) * 2.85);
+  height: calc(var(--touch-min) * 2.85);
+  flex: 0 0 auto;
+  touch-action: none;
+}
+.vstick[hidden] { display: none !important; }
+.vstick-base {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 234, 225, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.vstick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--touch-min) * 1.15);
+  height: calc(var(--touch-min) * 1.15);
+  margin: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 234, 225, 0.28);
+  background: rgba(255, 255, 255, 0.18);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  will-change: transform;
+}
+.vstick.is-active .vstick-knob {
+  background: rgba(212, 120, 58, 0.55);
+  border-color: rgba(212, 120, 58, 0.85);
+}
+body.play-shell.left-stick .dpad { display: none !important; }
+body.play-shell.left-dpad .vstick { display: none !important; }
+
+.stream-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  gap: var(--space-1);
+  text-align: center;
+  padding: var(--space-3);
+  background: rgba(13, 12, 11, 0.88);
+  color: var(--paper-dim, #c9c2b6);
+}
+.stream-cover.hidden { display: none; }
+.stream-cover button {
+  min-height: 36px;
+  justify-self: center;
+}
+
+.play-shell.pad-off .play-layout,
+.play-layout.controls-hidden {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "stage";
+}
+.play-shell.pad-off .rail,
+.play-layout.controls-hidden .rail {
+  display: none;
+}
+
+/* Overlay chrome: stream fills stage; translucent controls float on top */
+.play-shell.pad-overlay.pad-on .play-layout {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "stage";
+  gap: 0;
+  padding:
+    max(2px, env(safe-area-inset-top, 0px))
+    max(2px, env(safe-area-inset-right, 0px))
+    max(2px, env(safe-area-inset-bottom, 0px))
+    max(2px, env(safe-area-inset-left, 0px));
+}
+.play-shell.pad-overlay.pad-on .rail {
+  position: absolute;
+  z-index: 8;
+  top: max(6px, env(safe-area-inset-top, 0px));
+  bottom: max(6px, env(safe-area-inset-bottom, 0px));
+  width: min(calc(var(--lvw) * 0.3), 168px);
+  justify-content: space-between;
+  pointer-events: none;
+  background: transparent !important;
+  min-height: 0;
+  /* Lift dpad / ABXY / stick away from the bottom edge */
+  padding-bottom: clamp(36px, 14vh, 88px);
+  box-sizing: border-box;
+}
+.play-shell.pad-overlay.pad-on .rail > * {
+  pointer-events: auto;
+}
+.play-shell.pad-overlay.pad-on .rail-left {
+  left: max(4px, env(safe-area-inset-left, 0px));
+  grid-area: unset;
+}
+.play-shell.pad-overlay.pad-on .rail-right {
+  right: max(4px, env(safe-area-inset-right, 0px));
+  grid-area: unset;
+}
+.play-shell.pad-overlay.pad-on .play-layout .pad-btn,
+.play-shell.pad-overlay.pad-on .vstick-base {
+  background: var(--pad-ov-bg, rgba(255, 255, 255, 0.14));
+  border-color: var(--pad-ov-border, rgba(255, 255, 255, 0.24));
+  color: var(--pad-ov-fg, rgba(239, 234, 225, 0.95));
+  opacity: var(--pad-ov-opacity, 1);
+  backdrop-filter: blur(var(--pad-ov-blur, 2px));
+  -webkit-backdrop-filter: blur(var(--pad-ov-blur, 2px));
+}
+.play-shell.pad-overlay.pad-on .vstick-knob {
+  background: var(--pad-ov-knob, rgba(255, 255, 255, 0.28));
+  border-color: var(--pad-ov-border, rgba(255, 255, 255, 0.24));
+  opacity: var(--pad-ov-opacity, 1);
+}
+.play-shell.pad-overlay.pad-on .play-layout .pad-btn:active,
+.play-shell.pad-overlay.pad-on .play-layout .pad-btn.active,
+.play-shell.pad-overlay.pad-on .vstick.is-active .vstick-knob {
+  opacity: 1;
+  background: rgba(212, 120, 58, 0.72);
+  border-color: rgba(212, 120, 58, 0.9);
+  color: #efeae1;
+}
+/* 100%: visually gone and not intercepting touches */
+.play-shell.pad-overlay.pad-on.pad-ov-gone .rail .pad-btn,
+.play-shell.pad-overlay.pad-on.pad-ov-gone .rail .vstick,
+.play-shell.pad-overlay.pad-on.pad-ov-gone .rail .dpad,
+.play-shell.pad-overlay.pad-on.pad-ov-gone .rail .face,
+.play-shell.pad-overlay.pad-on.pad-ov-gone .rail .pad-shoulders,
+.play-shell.pad-overlay.pad-on.pad-ov-gone .rail .pad-system {
+  opacity: 0 !important;
+  visibility: hidden;
+  pointer-events: none !important;
+}
+
+.menu-opacity {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--menu-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--paper-dim, #c9c2b6);
+  font-size: 0.72rem;
+}
+.menu-opacity input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent, #d4783a);
+}
+.menu-opacity #padOpacityVal {
+  min-width: 2.4em;
+  text-align: right;
+  color: var(--paper, #efeae1);
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only-pad {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* Layout mode is set by JS (.layout-portrait / .layout-landscape),
+   so phone tilt can be overridden from the pull menu. */
+.play-shell.layout-landscape {
+  --touch-min: max(36px, min(44px, calc(var(--lvmin) * 0.1)));
+  --pull-w: 14px;
+  --pull-hit-w: 36px;
+}
+.play-shell.layout-landscape .play-layout {
+  grid-template-columns:
+    minmax(var(--rail-left-w, auto), max-content)
+    minmax(0, 1fr)
+    minmax(var(--rail-right-w, auto), max-content);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "left stage right";
+  padding-top: max(var(--space-1), env(safe-area-inset-top, 0px));
+}
+.play-shell.layout-landscape .rail {
+  justify-content: space-between;
+  height: 100%;
+  min-height: 0;
+  overflow: visible;
+}
+.play-shell.layout-landscape.pad-off .play-layout,
+.play-shell.layout-landscape .play-layout.controls-hidden {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "stage";
+}
+.play-shell.layout-landscape .menu-sheet {
+  width: min(calc(var(--lvw) * 0.42), 320px);
+  max-height: calc(var(--lvh) - 24px);
+}
+.play-shell.layout-landscape.pad-overlay.pad-on .rail {
+  width: min(calc(var(--lvw) * 0.26), 150px);
+}
+
+.play-shell.layout-portrait .play-layout {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "stage stage"
+    "left right";
+}
+.play-shell.layout-portrait {
+  --touch-min: max(40px, min(48px, calc(var(--lvw) * 0.12)));
+}
+.play-shell.layout-portrait .rail {
+  justify-content: flex-start;
+  gap: 6px;
+  background: rgba(13, 12, 11, 0.92);
+  min-height: calc(var(--touch-min) * 4.5);
+}
+/* Keep SEL/TP/ST directly under L/R; park dpad/face at the bottom */
+.play-shell.layout-portrait .rail .dpad,
+.play-shell.layout-portrait .rail .face,
+.play-shell.layout-portrait .rail .vstick {
+  margin-top: auto;
+}
+.play-shell.layout-portrait.pad-overlay.pad-on .rail {
+  justify-content: flex-start;
+}
+
+/* Rotated forced layout: keep pads/menu usable in logical landscape/portrait box */
+.play-shell.orient-rot-cw .play-layout,
+.play-shell.orient-rot-ccw .play-layout {
+  min-height: 0;
+  height: 100%;
+}
+.play-shell.orient-rot-cw.layout-landscape .rail,
+.play-shell.orient-rot-ccw.layout-landscape .rail {
+  /* ensure dpad/face stay in the rail column, not clipped */
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.play-shell.orient-rot-cw .menu-sheet,
+.play-shell.orient-rot-ccw .menu-sheet {
+  width: min(calc(var(--lvw) * 0.42), 320px);
+  max-height: calc(var(--lvh) - 24px);
+}
+.play-shell.orient-rot-cw .menu-icon-btn,
+.play-shell.orient-rot-ccw .menu-icon-btn {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-sheet { transition: none; }
+}
+
+/* ===== Custom free layout + editor ===== */
+.play-shell.pad-custom.pad-on .play-layout {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "stage";
+  gap: 0;
+  padding:
+    max(2px, env(safe-area-inset-top, 0px))
+    max(2px, env(safe-area-inset-right, 0px))
+    max(2px, env(safe-area-inset-bottom, 0px))
+    max(2px, env(safe-area-inset-left, 0px));
+  position: relative;
+}
+.play-shell.pad-custom.pad-on .rail {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  justify-content: unset !important;
+  pointer-events: none;
+  background: transparent !important;
+  padding: 0 !important;
+  gap: 0;
+  grid-area: unset;
+}
+.play-shell.pad-custom.pad-on .rail-left,
+.play-shell.pad-custom.pad-on .rail-right {
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+.play-shell.pad-custom.pad-on [data-pad-unit] {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 9;
+}
+.play-shell.pad-custom.pad-on .pad-shoulders,
+.play-shell.pad-custom.pad-on .pad-system {
+  width: auto;
+  min-width: calc(var(--touch-min) * 2.2);
+  max-width: none;
+  gap: 6px;
+}
+.play-shell.pad-custom.pad-on .dpad:not(.pad-cluster-split),
+.play-shell.pad-custom.pad-on .face:not(.pad-cluster-split) {
+  width: calc(var(--touch-min) * 2.75) !important;
+  height: calc(var(--touch-min) * 2.75) !important;
+  max-width: none;
+  margin: 0 !important;
+}
+.play-shell.pad-custom.pad-on .vstick {
+  width: calc(var(--touch-min) * 2.85) !important;
+  height: calc(var(--touch-min) * 2.85) !important;
+  max-width: none;
+  margin: 0 !important;
+}
+
+/* Split: hoist atoms so % positions share the rail / playLayout space */
+.play-shell.pad-custom.pad-on .pad-cluster-split {
+  display: contents;
+}
+.play-shell.pad-custom.pad-on .pad-atom {
+  position: absolute !important;
+  pointer-events: auto !important;
+  z-index: 9;
+  right: auto !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  /* Kill diamond defaults (.face-y / .dpad up etc.) when free-placed */
+  left: var(--pad-x, 50%) !important;
+  top: var(--pad-y, 50%) !important;
+  transform: translate(-50%, -50%) !important;
+}
+.play-shell.pad-custom.pad-on .pad-atom.pad-btn:not(.slim) {
+  width: var(--touch-min) !important;
+  height: var(--touch-min) !important;
+  min-width: var(--touch-min) !important;
+  min-height: var(--touch-min) !important;
+}
+.play-shell.pad-custom.pad-on .pad-atom.pad-btn.slim {
+  width: auto !important;
+  height: auto !important;
+  min-width: calc(var(--touch-min) * 1.05);
+  min-height: calc(var(--touch-min) * 0.9);
+}
+.play-shell.pad-custom.pad-on .pad-hidden,
+.play-shell.pad-custom.pad-on [data-pad-hidden="1"] {
+  display: none !important;
+}
+
+.play-shell.pad-edit .play-stage iframe {
+  pointer-events: none;
+}
+.play-shell.pad-edit [data-pad-unit] {
+  outline: 1px dashed rgba(212, 120, 58, 0.65);
+  outline-offset: 4px;
+  cursor: grab;
+  touch-action: none;
+}
+.play-shell.pad-edit [data-pad-unit].is-dragging {
+  outline-color: rgba(212, 120, 58, 1);
+  cursor: grabbing;
+  z-index: 20;
+  filter: brightness(1.15);
+}
+.play-shell.pad-edit .pad-shoulders .pad-btn,
+.play-shell.pad-edit .pad-system .pad-btn,
+.play-shell.pad-edit .vstick {
+  position: relative;
+}
+.pad-edit-hide {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 30;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 234, 225, 0.35);
+  background: rgba(140, 40, 40, 0.92);
+  color: #efeae1;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pad-edit-bar {
+  position: absolute;
+  left: 50%;
+  bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  max-width: min(calc(var(--lvw) * 0.96), 520px);
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(18, 16, 14, 0.92);
+  border: 1px solid rgba(239, 234, 225, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.pad-edit-bar[hidden] {
+  display: none !important;
+}
+.pad-edit-bar button {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 234, 225, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--paper, #efeae1);
+}
+.pad-edit-bar button.accent {
+  background: var(--accent, #d4783a);
+  color: #1a120c;
+  border-color: transparent;
+  font-weight: 600;
+}
+.menu-item.is-empty-slot {
+  opacity: 0.72;
+}
+
+/* In-app confirm (gamepad-friendly; replaces window.confirm) */
+.gr-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(8, 7, 6, 0.72);
+}
+.gr-confirm[hidden] {
+  display: none !important;
+}
+.gr-confirm-card {
+  width: min(92vw, 360px);
+  padding: 1.15rem 1.2rem 1.05rem;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 234, 225, 0.14);
+  background: #161411;
+  color: var(--paper, #efeae1);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+.gr-confirm-title {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.gr-confirm-msg {
+  margin: 0 0 0.65rem;
+  color: var(--paper-dim, #c9c2b6);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.gr-confirm-hint {
+  margin: 0 0 0.85rem;
+  color: var(--paper-dim, #c9c2b6);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+body.play-shell:not(.physical-pad) .gr-confirm-hint {
+  display: none;
+}
+.gr-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.gr-confirm-btn {
+  min-height: 44px;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 234, 225, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--paper, #efeae1);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.gr-confirm-btn-danger {
+  border-color: rgba(196, 84, 72, 0.55);
+  background: rgba(196, 84, 72, 0.22);
+  color: #f3d4cf;
+}
+.gr-confirm-btn.is-gp-focus,
+.gr-confirm-btn:focus-visible {
+  outline: 2px solid var(--accent, #d4783a);
+  outline-offset: 1px;
+  background: rgba(212, 120, 58, 0.2);
+}
+.gr-confirm-btn-danger.is-gp-focus,
+.gr-confirm-btn-danger:focus-visible {
+  outline-color: #e07a6e;
+  background: rgba(196, 84, 72, 0.38);
+}
+
+.gr-res-card {
+  width: min(92vw, 380px);
+}
+.gr-res-options {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 0.85rem;
+}
+.gr-res-opt {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 234, 225, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--paper, #efeae1);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.gr-res-opt.is-current {
+  border-color: rgba(212, 120, 58, 0.45);
+  background: rgba(212, 120, 58, 0.12);
+}
+.gr-res-opt.is-gp-focus,
+.gr-res-opt:focus-visible {
+  outline: 2px solid var(--accent, #d4783a);
+  outline-offset: 1px;
+  background: rgba(212, 120, 58, 0.22);
+}
+.gr-res-actions {
+  grid-template-columns: 1fr;
+}

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta http-equiv="Permissions-Policy" content="gamepad=(self)" />
+  <title>Game Remote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="lib-grid">
+  <div class="lib-top" id="libTop">
+  <header class="chrome">
+    <div class="chrome-left">
+      <strong class="wordmark">Game Remote</strong>
+    </div>
+    <nav class="chrome-nav" aria-label="操作">
+      <button type="button" class="accent resume-play" id="btnResumePlay" hidden>プレイ中に戻る</button>
+      <button type="button" class="icon-btn" id="btnSearch" aria-label="検索" aria-expanded="false" aria-controls="searchPanel" title="検索">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="btnFilterMenu" aria-label="フィルタ" title="フィルタ">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="btnMainMenu" aria-label="メニュー" aria-expanded="false" aria-controls="mainMenu" title="メニュー">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <section id="searchPanel" class="findbar hidden" aria-hidden="true">
+    <input id="search" type="search" placeholder="タイトル検索" autocomplete="off" />
+    <label><input type="checkbox" id="installedOnly" checked /> インストール済</label>
+    <label><input type="checkbox" id="favoriteOnly" /> お気に入り</label>
+    <span id="resultCount"></span>
+  </section>
+  </div>
+
+  <section class="quick-stream" aria-label="Moonlight 起動">
+    <span class="quick-label">配信</span>
+    <button type="button" class="accent" id="btnMwDesktop">デスクトップ</button>
+    <button type="button" id="btnMwPlaynite">Playnite</button>
+    <button type="button" id="btnMwSteam">Steam</button>
+  </section>
+
+  <!-- Hero art: only title overlaps; meta sits below on solid panel -->
+  <section id="billboard" class="billboard" aria-live="polite">
+    <div class="billboard-hero">
+      <div class="billboard-art" id="billboardArt"></div>
+      <div class="billboard-fade"></div>
+      <div class="billboard-title-block">
+        <p class="eyebrow" id="bbEyebrow">ライブラリ</p>
+        <h1 id="bbTitle">タイトルを選ぶ</h1>
+      </div>
+    </div>
+    <div class="billboard-meta">
+      <p class="bb-desc" id="bbDesc">カバーに触れると、その作品の背景がここに広がります。</p>
+      <div class="bb-stats" id="bbStats"></div>
+      <div class="bb-actions">
+        <button type="button" class="accent" id="bbPlay" disabled>起動してストリーム</button>
+        <button type="button" class="accent" id="bbResume" hidden>ストリームに戻る</button>
+        <button type="button" id="bbOpen" disabled>詳細</button>
+      </div>
+    </div>
+  </section>
+
+  <aside id="filterPanel" class="drawer hidden" aria-hidden="true">
+    <div class="drawer-head">
+      <h2>フィルタ</h2>
+      <button type="button" class="linkish" id="filterClose">閉じる</button>
+    </div>
+    <div class="filter-quick">
+      <button type="button" id="btnSort">並べ替え</button>
+      <button type="button" id="btnGroup">グループ</button>
+      <button type="button" class="linkish" id="clearFilters">条件クリア</button>
+    </div>
+    <div id="filterFields"></div>
+  </aside>
+
+  <aside id="mainMenu" class="drawer drawer-menu hidden" aria-hidden="true">
+    <div class="drawer-head">
+      <h2>メニュー</h2>
+      <button type="button" class="linkish" id="mainMenuClose">閉じる</button>
+    </div>
+    <div class="menu-block">
+      <p class="menu-label">表示</p>
+      <button type="button" class="menu-row" id="btnView">ショーケース表示</button>
+    </div>
+    <div class="menu-block">
+      <p class="menu-label">ライブラリ</p>
+      <button type="button" class="menu-row" id="btnRefresh">ライブラリ更新</button>
+      <p class="menu-hint">Playnite から一覧を再読み込みします</p>
+    </div>
+    <div class="menu-block">
+      <p class="menu-label">設定</p>
+      <button type="button" class="menu-row" id="btnControls">オンスクリーンパッド</button>
+      <button type="button" class="menu-row" id="btnMap">キー割当</button>
+      <button type="button" class="menu-row" id="btnFaceLayout">面ボタン: 自動</button>
+      <p class="menu-hint">PSコントローラで ○× が逆のとき切替</p>
+    </div>
+  </aside>
+  <div id="menuBackdrop" class="menu-backdrop hidden" hidden></div>
+
+  <main id="library" class="library"></main>
+
+  <!-- Split list: left rows + right detail pane -->
+  <section id="listView" class="list-view hidden" aria-live="polite" aria-label="リスト表示">
+    <aside class="list-rail-wrap">
+      <div class="list-rail" id="listRail"></div>
+    </aside>
+    <div
+      class="list-split"
+      id="listSplit"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="リスト幅を調整"
+      tabindex="0"
+    ></div>
+    <div class="list-detail" id="listDetail">
+      <div class="list-detail-hero">
+        <div class="list-detail-art" id="listDetailArt"></div>
+        <div class="list-detail-fade"></div>
+        <div class="list-detail-title-block">
+          <p class="eyebrow" id="listEyebrow">ライブラリ</p>
+          <h1 id="listTitle">タイトルを選ぶ</h1>
+        </div>
+      </div>
+      <div class="list-detail-body">
+        <div class="bb-stats" id="listStats"></div>
+        <div class="bb-actions">
+          <button type="button" class="accent" id="listPlay" disabled>起動してストリーム</button>
+          <button type="button" class="accent" id="listResume" hidden>ストリームに戻る</button>
+          <button type="button" id="listOpen" disabled>詳細ページ</button>
+        </div>
+        <div class="list-desc rich" id="listDesc">左の一覧からタイトルを選ぶと、ここに詳細が入ります。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PS5-style: tile row on top, title + description below, bg fades behind -->
+  <section id="showcase" class="showcase hidden" aria-live="polite" aria-label="ショーケース">
+    <div class="showcase-art-stack" aria-hidden="true">
+      <div class="showcase-art is-shown" id="showcaseArtA"></div>
+      <div class="showcase-art" id="showcaseArtB"></div>
+    </div>
+    <div class="showcase-art" id="showcaseArt" hidden></div>
+    <div class="showcase-fade"></div>
+    <div class="showcase-body">
+      <div class="showcase-track-wrap">
+        <button type="button" class="showcase-nav showcase-nav-prev" id="showcaseNavPrev" aria-label="前のタイトル" hidden>
+          <span class="showcase-nav-tri" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="showcase-nav showcase-nav-next" id="showcaseNavNext" aria-label="次のタイトル" hidden>
+          <span class="showcase-nav-tri" aria-hidden="true"></span>
+        </button>
+        <div class="showcase-edge showcase-edge-left" aria-hidden="true"></div>
+        <div class="showcase-edge showcase-edge-right" aria-hidden="true"></div>
+        <div class="showcase-track" id="showcaseTrack"></div>
+      </div>
+      <div class="showcase-info">
+        <p class="eyebrow" id="scEyebrow">ライブラリ</p>
+        <h1 id="scTitle">タイトルを選ぶ</h1>
+        <div class="bb-stats" id="scStats"></div>
+        <div class="bb-actions">
+          <button type="button" class="accent" id="scPlay" disabled>起動してストリーム</button>
+          <button type="button" class="accent" id="scResume" hidden>ストリームに戻る</button>
+          <button type="button" id="scOpen" disabled>詳細</button>
+        </div>
+        <div class="sc-desc rich" id="scDesc">十字で選択 · ○詳細 · □すぐ起動 · △フィルタ · OPTIONSメニュー</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="detail" class="detail hidden" aria-hidden="true">
+    <button type="button" class="linkish back" id="detailBack">ライブラリへ戻る</button>
+    <div class="detail-billboard">
+      <div class="billboard-hero">
+        <div class="billboard-art" id="detailArt"></div>
+        <div class="billboard-fade tall"></div>
+        <div class="billboard-title-block">
+          <p class="eyebrow" id="detailEyebrow"></p>
+          <h1 id="detailTitle"></h1>
+        </div>
+      </div>
+      <div class="billboard-meta">
+        <div class="bb-stats" id="detailStats"></div>
+        <div class="tag-row" id="detailTags"></div>
+        <div class="bb-actions">
+          <button type="button" class="accent" id="detailPlay">起動してストリーム</button>
+          <button type="button" id="detailStreamOnly">デスクトップ配信</button>
+          <button type="button" id="detailTogglePad">パッド表示切替</button>
+        </div>
+        <dl class="meta-grid" id="detailMeta"></dl>
+      </div>
+    </div>
+    <article class="detail-paper">
+      <h2>説明</h2>
+      <div id="detailDesc" class="rich"></div>
+      <h2 id="notesHead" class="hidden">メモ</h2>
+      <div id="detailNotes" class="rich hidden"></div>
+    </article>
+  </section>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <div id="pad" class="pad hidden" aria-hidden="true">
+    <div class="pad-bar">
+      <span id="padMode">パッド（キー割当経由）</span>
+      <button type="button" class="linkish" id="padHide">隠す</button>
+    </div>
+    <div class="pad-body">
+      <div class="dpad">
+        <button data-action="up" class="pad-btn">▲</button>
+        <button data-action="left" class="pad-btn">◀</button>
+        <button data-action="right" class="pad-btn">▶</button>
+        <button data-action="down" class="pad-btn">▼</button>
+      </div>
+      <div class="pad-shoulders">
+        <button data-action="l2" class="pad-btn slim">L2</button>
+        <button data-action="l1" class="pad-btn slim">L1</button>
+        <button data-action="r1" class="pad-btn slim">R1</button>
+        <button data-action="r2" class="pad-btn slim">R2</button>
+      </div>
+      <div class="face">
+        <button data-action="y" class="pad-btn face-y">Y</button>
+        <button data-action="x" class="pad-btn face-x">X</button>
+        <button data-action="b" class="pad-btn face-b">B</button>
+        <button data-action="a" class="pad-btn face-a">A</button>
+      </div>
+      <div class="pad-system">
+        <button data-action="select" class="pad-btn slim">SELECT</button>
+        <button data-action="touchpad" class="pad-btn slim">TOUCH</button>
+        <button data-action="start" class="pad-btn slim">START</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="mapDlg">
+    <form method="dialog" class="dlg">
+      <h2>キー割当</h2>
+      <div class="map-scope">
+        <label><input type="radio" name="mapScope" value="default" checked /> デフォルト</label>
+        <label><input type="radio" name="mapScope" value="game" id="mapScopeGame" /> このゲーム</label>
+      </div>
+      <p class="hint" id="mapGameLabel">ゲーム未選択</p>
+      <div id="mapList" class="map-list"></div>
+      <div class="row">
+        <button type="button" class="accent" id="mapSave">保存</button>
+        <button type="button" id="mapReset">初期化</button>
+        <button type="button" id="mapClearGame">例外を削除</button>
+        <button value="cancel">閉じる</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="sortDlg">
+    <form method="dialog" class="dlg">
+      <h2>並べ替え</h2>
+      <label><input type="radio" name="sort" value="name" checked /> 名前</label>
+      <label><input type="radio" name="sort" value="recent" /> 最近プレイ</label>
+      <label><input type="radio" name="sort" value="playtime" /> プレイ時間</label>
+      <label><input type="radio" name="sort" value="added" /> 追加日</label>
+      <p class="hint" style="margin:0.6rem 0 0.2rem">順序</p>
+      <label><input type="radio" name="sortDir" value="asc" /> 昇順</label>
+      <label><input type="radio" name="sortDir" value="desc" /> 降順</label>
+      <div class="row">
+        <button value="ok" class="accent">適用</button>
+        <button value="cancel">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="groupDlg">
+    <form method="dialog" class="dlg">
+      <h2>グループ</h2>
+      <label><input type="radio" name="group" value="none" checked /> なし</label>
+      <label><input type="radio" name="group" value="platforms" /> プラットフォーム</label>
+      <label><input type="radio" name="group" value="genres" /> ジャンル</label>
+      <label><input type="radio" name="group" value="source" /> ソース</label>
+      <label><input type="radio" name="group" value="completionStatus" /> クリア状況</label>
+      <div class="row">
+        <button value="ok" class="accent">適用</button>
+        <button value="cancel">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/controls.js"></script>
+  <script src="/static/app.js?cb=20260903x"></script>
+</body>
+</html>

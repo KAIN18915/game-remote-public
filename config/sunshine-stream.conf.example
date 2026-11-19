@@ -1,0 +1,24 @@
+# Stream-tuning excerpt of the Sunshine config I used for Game Remote.
+# Sunshine itself is third-party (https://github.com/LizardByte/Sunshine);
+# only the choice of values below is mine. Host-specific lines removed.
+#
+# Context: on my laptop the capture path only worked through the integrated
+# GPU, and neither NVENC nor QSV was usable, so this is a software x264 setup.
+
+encoder = software
+sw_preset = superfast        # was ultrafast; superfast was less blocky at 1080p60
+sw_tune = zerolatency        # no lookahead / B-frame delay
+min_threads = 8
+
+# Outside sessions go phone (cellular) -> Tailscale (relay or jittery direct path).
+# 5-10% FEC let artifacts accumulate on that path, so 20% + a long ping timeout.
+fec_percentage = 20
+ping_timeout = 20000
+
+gamepad = ds4
+motion_as_ds4 = enabled
+touchpad_as_ds4 = enabled
+
+# Do not advertise HEVC/AV1: software x265 was slower and blockier than x264 here.
+hevc_mode = 1
+av1_mode = 1
